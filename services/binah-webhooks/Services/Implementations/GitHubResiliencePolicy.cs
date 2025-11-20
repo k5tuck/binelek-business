@@ -11,19 +11,18 @@ using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
 using Polly.Timeout;
-using Polly.Wrap;
 
 namespace Binah.Webhooks.Services.Implementations;
 
 /// <summary>
-/// Implementation of GitHub API resilience policies using Polly
+/// Implementation of GitHub API resilience policies using Polly v8
 /// </summary>
 public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 {
     private readonly ILogger<GitHubResiliencePolicy> _logger;
     private readonly IConfiguration _configuration;
-    private readonly ConcurrentDictionary<string, AsyncPolicyWrap> _tenantPolicies;
-    private readonly ConcurrentDictionary<string, AsyncCircuitBreakerPolicy> _circuitBreakers;
+    private readonly ConcurrentDictionary<string, ResiliencePipeline> _tenantPipelines;
+    private readonly ConcurrentDictionary<string, CircuitBreakerStateProvider> _circuitBreakerStates;
 
     private readonly int _retryCount;
     private readonly int _retryDelaySeconds;
@@ -38,8 +37,8 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
     {
         _logger = logger;
         _configuration = configuration;
-        _tenantPolicies = new ConcurrentDictionary<string, AsyncPolicyWrap>();
-        _circuitBreakers = new ConcurrentDictionary<string, AsyncCircuitBreakerPolicy>();
+        _tenantPipelines = new ConcurrentDictionary<string, ResiliencePipeline>();
+        _circuitBreakerStates = new ConcurrentDictionary<string, CircuitBreakerStateProvider>();
 
         // Load configuration
         _retryCount = _configuration.GetValue<int>("GitHub:Resilience:RetryCount", 3);
@@ -61,11 +60,11 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
     public async Task<T> ExecuteAsync<T>(Func<Task<T>> action, string tenantId)
     {
-        var policy = GetOrCreatePolicy(tenantId);
+        var pipeline = GetOrCreatePipeline(tenantId);
 
         try
         {
-            return await policy.ExecuteAsync(async () => await action());
+            return await pipeline.ExecuteAsync(async token => await action(), default);
         }
         catch (Exception ex)
         {
@@ -76,11 +75,11 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
     public async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> action, string tenantId)
     {
-        var retryPolicy = CreateRetryPolicy(tenantId);
+        var pipeline = CreateRetryPipeline(tenantId);
 
         try
         {
-            return await retryPolicy.ExecuteAsync(async () => await action());
+            return await pipeline.ExecuteAsync(async token => await action(), default);
         }
         catch (Exception ex)
         {
@@ -100,9 +99,9 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
     public string GetCircuitState(string tenantId)
     {
-        if (_circuitBreakers.TryGetValue(tenantId, out var circuitBreaker))
+        if (_circuitBreakerStates.TryGetValue(tenantId, out var stateProvider))
         {
-            return circuitBreaker.CircuitState.ToString();
+            return stateProvider.CircuitState.ToString();
         }
 
         return "NotInitialized";
@@ -110,9 +109,10 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
     public void ResetCircuit(string tenantId)
     {
-        if (_circuitBreakers.TryGetValue(tenantId, out var circuitBreaker))
+        if (_circuitBreakerStates.TryGetValue(tenantId, out var stateProvider))
         {
-            circuitBreaker.Reset();
+            stateProvider.Isolate();
+            stateProvider.Reset();
             _logger.LogInformation("Circuit breaker reset for tenant {TenantId}", tenantId);
         }
         else
@@ -121,102 +121,109 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
         }
     }
 
-    private AsyncPolicyWrap GetOrCreatePolicy(string tenantId)
+    private ResiliencePipeline GetOrCreatePipeline(string tenantId)
     {
-        return _tenantPolicies.GetOrAdd(tenantId, _ => CreateCombinedPolicy(tenantId));
+        return _tenantPipelines.GetOrAdd(tenantId, _ => CreateCombinedPipeline(tenantId));
     }
 
-    private AsyncPolicyWrap CreateCombinedPolicy(string tenantId)
+    private ResiliencePipeline CreateCombinedPipeline(string tenantId)
     {
-        var retryPolicy = CreateRetryPolicy(tenantId);
-        var circuitBreakerPolicy = CreateCircuitBreakerPolicy(tenantId);
-        var timeoutPolicy = CreateTimeoutPolicy(tenantId);
-        var bulkheadPolicy = CreateBulkheadPolicy(tenantId);
+        var stateProvider = new CircuitBreakerStateProvider();
+        _circuitBreakerStates[tenantId] = stateProvider;
 
-        // Combine policies: Bulkhead → CircuitBreaker → Retry → Timeout
-        return Policy.WrapAsync(bulkheadPolicy, circuitBreakerPolicy, retryPolicy, timeoutPolicy);
-    }
-
-    private AsyncRetryPolicy CreateRetryPolicy(string tenantId)
-    {
-        return Policy
-            .Handle<HttpRequestException>()
-            .Or<TimeoutRejectedException>()
-            .Or<ApiException>(ex => IsTransientError(ex))
-            .WaitAndRetryAsync(
-                retryCount: _retryCount,
-                sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(_retryDelaySeconds * Math.Pow(2, retryAttempt - 1)), // Exponential backoff
-                onRetry: (exception, timeSpan, retryCount, context) =>
-                {
-                    _logger.LogWarning(
-                        exception,
-                        "Retry {RetryCount}/{MaxRetries} for tenant {TenantId}. Waiting {Delay}s before next attempt",
-                        retryCount,
-                        _retryCount,
-                        tenantId,
-                        timeSpan.TotalSeconds);
-                });
-    }
-
-    private AsyncCircuitBreakerPolicy CreateCircuitBreakerPolicy(string tenantId)
-    {
-        var policy = Policy
-            .Handle<HttpRequestException>()
-            .Or<ApiException>(ex => !IsRateLimitError(ex))
-            .CircuitBreakerAsync(
-                handledEventsAllowedBeforeBreaking: _circuitBreakerFailureThreshold,
-                durationOfBreak: TimeSpan.FromSeconds(_circuitBreakerDurationSeconds),
-                onBreak: (exception, duration) =>
-                {
-                    _logger.LogError(
-                        exception,
-                        "Circuit breaker opened for tenant {TenantId}. Duration: {Duration}s",
-                        tenantId,
-                        duration.TotalSeconds);
-                },
-                onReset: () =>
-                {
-                    _logger.LogInformation("Circuit breaker reset for tenant {TenantId}", tenantId);
-                },
-                onHalfOpen: () =>
-                {
-                    _logger.LogInformation("Circuit breaker half-open for tenant {TenantId}. Testing connection...", tenantId);
-                });
-
-        _circuitBreakers[tenantId] = policy;
-        return policy;
-    }
-
-    private AsyncTimeoutPolicy CreateTimeoutPolicy(string tenantId)
-    {
-        return Policy
-            .TimeoutAsync(
-                timeout: TimeSpan.FromSeconds(_timeoutSeconds),
-                timeoutStrategy: TimeoutStrategy.Pessimistic,
-                onTimeoutAsync: (context, timeSpan, task) =>
+        return new ResiliencePipelineBuilder()
+            // Timeout policy
+            .AddTimeout(new TimeoutStrategyOptions
+            {
+                Timeout = TimeSpan.FromSeconds(_timeoutSeconds),
+                OnTimeout = args =>
                 {
                     _logger.LogWarning(
                         "Request timeout after {Timeout}s for tenant {TenantId}",
-                        timeSpan.TotalSeconds,
+                        args.Timeout.TotalSeconds,
                         tenantId);
-                    return Task.CompletedTask;
-                });
-    }
-
-    private Polly.Bulkhead.AsyncBulkheadPolicy CreateBulkheadPolicy(string tenantId)
-    {
-        return Policy
-            .BulkheadAsync(
-                maxParallelization: _maxConcurrentRequests,
-                maxQueuingActions: _maxConcurrentRequests * 2,
-                onBulkheadRejectedAsync: context =>
+                    return ValueTask.CompletedTask;
+                }
+            })
+            // Retry policy with exponential backoff
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = _retryCount,
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                Delay = TimeSpan.FromSeconds(_retryDelaySeconds),
+                ShouldHandle = new PredicateBuilder().Handle<HttpRequestException>()
+                    .Handle<TimeoutRejectedException>()
+                    .Handle<ApiException>(ex => IsTransientError(ex)),
+                OnRetry = args =>
                 {
                     _logger.LogWarning(
-                        "Bulkhead rejected request for tenant {TenantId}. Max concurrent requests ({MaxConcurrent}) exceeded",
+                        args.Outcome.Exception,
+                        "Retry {RetryCount}/{MaxRetries} for tenant {TenantId}. Waiting {Delay}s before next attempt",
+                        args.AttemptNumber + 1,
+                        _retryCount,
                         tenantId,
-                        _maxConcurrentRequests);
-                    return Task.CompletedTask;
-                });
+                        args.RetryDelay.TotalSeconds);
+                    return ValueTask.CompletedTask;
+                }
+            })
+            // Circuit breaker policy
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            {
+                FailureRatio = 0.5,
+                MinimumThroughput = _circuitBreakerFailureThreshold,
+                BreakDuration = TimeSpan.FromSeconds(_circuitBreakerDurationSeconds),
+                ShouldHandle = new PredicateBuilder().Handle<HttpRequestException>()
+                    .Handle<ApiException>(ex => !IsRateLimitError(ex)),
+                OnOpened = args =>
+                {
+                    _logger.LogError(
+                        args.Outcome.Exception,
+                        "Circuit breaker opened for tenant {TenantId}. Duration: {Duration}s",
+                        tenantId,
+                        args.BreakDuration.TotalSeconds);
+                    return ValueTask.CompletedTask;
+                },
+                OnClosed = args =>
+                {
+                    _logger.LogInformation("Circuit breaker reset for tenant {TenantId}", tenantId);
+                    return ValueTask.CompletedTask;
+                },
+                OnHalfOpened = args =>
+                {
+                    _logger.LogInformation("Circuit breaker half-open for tenant {TenantId}. Testing connection...", tenantId);
+                    return ValueTask.CompletedTask;
+                },
+                StateProvider = stateProvider
+            })
+            .Build();
+    }
+
+    private ResiliencePipeline CreateRetryPipeline(string tenantId)
+    {
+        return new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = _retryCount,
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                Delay = TimeSpan.FromSeconds(_retryDelaySeconds),
+                ShouldHandle = new PredicateBuilder().Handle<HttpRequestException>()
+                    .Handle<TimeoutRejectedException>()
+                    .Handle<ApiException>(ex => IsTransientError(ex)),
+                OnRetry = args =>
+                {
+                    _logger.LogWarning(
+                        args.Outcome.Exception,
+                        "Retry {RetryCount}/{MaxRetries} for tenant {TenantId}. Waiting {Delay}s before next attempt",
+                        args.AttemptNumber + 1,
+                        _retryCount,
+                        tenantId,
+                        args.RetryDelay.TotalSeconds);
+                    return ValueTask.CompletedTask;
+                }
+            })
+            .Build();
     }
 
     private bool IsTransientError(ApiException ex)
