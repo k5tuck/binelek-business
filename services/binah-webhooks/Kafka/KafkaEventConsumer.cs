@@ -59,14 +59,20 @@ public class KafkaEventConsumer : BackgroundService
             {
                 try
                 {
-                    var consumeResult = consumer.Consume(stoppingToken);
+                    // Use timeout-based consume to prevent thread pool blocking
+                    var consumeResult = consumer.Consume(TimeSpan.FromSeconds(1));
 
-                    if (consumeResult != null && consumeResult.Message != null)
+                    if (consumeResult?.Message != null)
                     {
                         await ProcessEventAsync(consumeResult.Message, stoppingToken);
 
                         // Commit offset after successful processing
                         consumer.Commit(consumeResult);
+                    }
+                    else
+                    {
+                        // No message received, yield to prevent tight loop
+                        await Task.Delay(100, stoppingToken);
                     }
                 }
                 catch (ConsumeException ex)
