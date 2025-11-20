@@ -487,7 +487,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
                     Reviewer = r.User.Login,
                     State = r.State.StringValue,
                     Body = r.Body,
-                    SubmittedAt = r.SubmittedAt?.DateTime
+                    SubmittedAt = r.SubmittedAt.DateTime
                 }).ToList(),
                 CanMerge = canMerge,
                 BlockingReasons = blockingReasons

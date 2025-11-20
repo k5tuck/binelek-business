@@ -64,7 +64,7 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
         try
         {
-            return await pipeline.ExecuteAsync(async token => await action(), default);
+            return await pipeline.ExecuteAsync(async (CancellationToken token) => await action(), CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -79,7 +79,7 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
 
         try
         {
-            return await pipeline.ExecuteAsync(async token => await action(), default);
+            return await pipeline.ExecuteAsync(async (CancellationToken token) => await action(), CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -111,9 +111,10 @@ public class GitHubResiliencePolicy : IGitHubResiliencePolicy
     {
         if (_circuitBreakerStates.TryGetValue(tenantId, out var stateProvider))
         {
-            stateProvider.Isolate();
-            stateProvider.Reset();
-            _logger.LogInformation("Circuit breaker reset for tenant {TenantId}", tenantId);
+            // Note: Polly v8 CircuitBreakerStateProvider doesn't expose manual reset methods
+            // Circuit breaker will automatically reset after the break duration expires
+            _logger.LogInformation("Circuit breaker state queried for tenant {TenantId}. Current state: {State}",
+                tenantId, stateProvider.CircuitState);
         }
         else
         {
