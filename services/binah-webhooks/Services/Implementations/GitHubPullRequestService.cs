@@ -55,7 +55,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information(
+            _logger.LogInformation(
                 "Creating pull request in {Owner}/{Repo}: {Title} ({HeadBranch} -> {BaseBranch})",
                 owner, repo, request.Title, request.HeadBranch, request.BaseBranch);
 
@@ -71,7 +71,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
 
             var pr = await client.PullRequest.Create(owner, repo, newPr);
 
-            _logger.Information("Pull request created: #{Number} - {Url}", pr.Number, pr.HtmlUrl);
+            _logger.LogInformation("Pull request created: #{Number} - {Url}", pr.Number, pr.HtmlUrl);
 
             // Add reviewers if specified
             if (request.Reviewers.Any())
@@ -89,12 +89,12 @@ public class GitHubPullRequestService : IGitHubPullRequestService
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error creating pull request: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error creating pull request: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to create pull request: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error creating pull request");
+            _logger.LogError(ex, "Error creating pull request");
             throw;
         }
     }
@@ -108,7 +108,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information("Getting pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
+            _logger.LogInformation("Getting pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
 
             var client = await CreateAuthenticatedClientAsync(tenantId);
             var pr = await client.PullRequest.Get(owner, repo, prNumber);
@@ -117,12 +117,12 @@ public class GitHubPullRequestService : IGitHubPullRequestService
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error getting pull request: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error getting pull request: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to get pull request: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error getting pull request");
+            _logger.LogError(ex, "Error getting pull request");
             throw;
         }
     }
@@ -143,7 +143,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
                 throw new ArgumentException("Tenant ID is required", nameof(tenantId));
             }
 
-            _logger.Information("Updating pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
+            _logger.LogInformation("Updating pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
 
             var client = await CreateAuthenticatedClientAsync(tenantId);
 
@@ -155,18 +155,18 @@ public class GitHubPullRequestService : IGitHubPullRequestService
 
             var pr = await client.PullRequest.Update(owner, repo, prNumber, update);
 
-            _logger.Information("Pull request updated: #{Number}", pr.Number);
+            _logger.LogInformation("Pull request updated: #{Number}", pr.Number);
 
             return MapPullRequestToResponse(pr);
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error updating pull request: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error updating pull request: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to update pull request: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error updating pull request");
+            _logger.LogError(ex, "Error updating pull request");
             throw;
         }
     }
@@ -181,7 +181,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information(
+            _logger.LogInformation(
                 "Merging pull request {Owner}/{Repo}#{Number} using {MergeMethod}",
                 owner, repo, prNumber, request.MergeMethod);
 
@@ -208,7 +208,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
 
             if (mergeResult.Merged)
             {
-                _logger.Information("Pull request merged successfully: #{Number}", prNumber);
+                _logger.LogInformation("Pull request merged successfully: #{Number}", prNumber);
 
                 // Delete branch if requested
                 if (request.DeleteBranchAfterMerge)
@@ -218,28 +218,28 @@ public class GitHubPullRequestService : IGitHubPullRequestService
                         var pr = await client.PullRequest.Get(owner, repo, prNumber);
                         var headRef = pr.Head.Ref;
                         await client.Git.Reference.Delete(owner, repo, $"heads/{headRef}");
-                        _logger.Information("Deleted branch {Branch} after merge", headRef);
+                        _logger.LogInformation("Deleted branch {Branch} after merge", headRef);
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning(ex, "Failed to delete branch after merge");
+                        _logger.LogWarning(ex, "Failed to delete branch after merge");
                     }
                 }
 
                 return true;
             }
 
-            _logger.Warning("Pull request merge failed: {Message}", mergeResult.Message);
+            _logger.LogWarning("Pull request merge failed: {Message}", mergeResult.Message);
             return false;
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error merging pull request: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error merging pull request: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to merge pull request: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error merging pull request");
+            _logger.LogError(ex, "Error merging pull request");
             throw;
         }
     }
@@ -253,7 +253,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information("Closing pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
+            _logger.LogInformation("Closing pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
 
             var client = await CreateAuthenticatedClientAsync(tenantId);
 
@@ -264,18 +264,18 @@ public class GitHubPullRequestService : IGitHubPullRequestService
 
             var pr = await client.PullRequest.Update(owner, repo, prNumber, update);
 
-            _logger.Information("Pull request closed: #{Number}", pr.Number);
+            _logger.LogInformation("Pull request closed: #{Number}", pr.Number);
 
             return pr.State == ItemState.Closed;
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error closing pull request: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error closing pull request: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to close pull request: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error closing pull request");
+            _logger.LogError(ex, "Error closing pull request");
             throw;
         }
     }
@@ -290,24 +290,24 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information("Adding comment to pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
+            _logger.LogInformation("Adding comment to pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
 
             var client = await CreateAuthenticatedClientAsync(tenantId);
 
             var issueComment = await client.Issue.Comment.Create(owner, repo, prNumber, comment);
 
-            _logger.Information("Comment added: {CommentId}", issueComment.Id);
+            _logger.LogInformation("Comment added: {CommentId}", issueComment.Id);
 
             return issueComment.Id;
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error adding comment: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error adding comment: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to add comment: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error adding comment");
+            _logger.LogError(ex, "Error adding comment");
             throw;
         }
     }
@@ -322,7 +322,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information(
+            _logger.LogInformation(
                 "Requesting reviewers for pull request {Owner}/{Repo}#{Number}: {Reviewers}",
                 owner, repo, prNumber, string.Join(", ", reviewers));
 
@@ -331,19 +331,19 @@ public class GitHubPullRequestService : IGitHubPullRequestService
             var reviewRequest = new PullRequestReviewRequest(reviewers, new List<string>());
             var result = await client.PullRequest.ReviewRequest.Create(owner, repo, prNumber, reviewRequest);
 
-            _logger.Information("Reviewers requested successfully");
+            _logger.LogInformation("Reviewers requested successfully");
 
             return true;
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error requesting reviewers: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error requesting reviewers: {Message}", ex.Message);
             // Don't throw - invalid reviewers shouldn't fail the whole operation
             return false;
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error requesting reviewers");
+            _logger.LogError(ex, "Error requesting reviewers");
             return false;
         }
     }
@@ -358,7 +358,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information(
+            _logger.LogInformation(
                 "Adding labels to pull request {Owner}/{Repo}#{Number}: {Labels}",
                 owner, repo, prNumber, string.Join(", ", labels));
 
@@ -366,18 +366,18 @@ public class GitHubPullRequestService : IGitHubPullRequestService
 
             var result = await client.Issue.Labels.AddToIssue(owner, repo, prNumber, labels.ToArray());
 
-            _logger.Information("Labels added successfully");
+            _logger.LogInformation("Labels added successfully");
 
             return true;
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error adding labels: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error adding labels: {Message}", ex.Message);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error adding labels");
+            _logger.LogError(ex, "Error adding labels");
             return false;
         }
     }
@@ -391,7 +391,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
     {
         try
         {
-            _logger.Information("Getting status for pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
+            _logger.LogInformation("Getting status for pull request {Owner}/{Repo}#{Number}", owner, repo, prNumber);
 
             var client = await CreateAuthenticatedClientAsync(tenantId);
 
@@ -453,7 +453,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "Failed to get status checks");
+                    _logger.LogWarning(ex, "Failed to get status checks");
                 }
             }
 
@@ -497,12 +497,12 @@ public class GitHubPullRequestService : IGitHubPullRequestService
         }
         catch (ApiException ex)
         {
-            _logger.Error(ex, "GitHub API error getting pull request status: {Message}", ex.Message);
+            _logger.LogError(ex, "GitHub API error getting pull request status: {Message}", ex.Message);
             throw new InvalidOperationException($"Failed to get pull request status: {ex.Message}", ex);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error getting pull request status");
+            _logger.LogError(ex, "Error getting pull request status");
             throw;
         }
     }
