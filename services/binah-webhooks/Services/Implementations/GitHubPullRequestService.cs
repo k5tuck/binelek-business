@@ -1,8 +1,8 @@
 using Binah.Webhooks.Models.DTOs.GitHub;
 using Binah.Webhooks.Repositories.Interfaces;
 using Binah.Webhooks.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using Octokit;
-using Serilog;
 
 namespace Binah.Webhooks.Services.Implementations;
 
@@ -12,11 +12,11 @@ namespace Binah.Webhooks.Services.Implementations;
 public class GitHubPullRequestService : IGitHubPullRequestService
 {
     private readonly IGitHubOAuthTokenRepository _tokenRepository;
-    private readonly ILogger _logger;
+    private readonly ILogger<GitHubPullRequestService> _logger;
 
     public GitHubPullRequestService(
         IGitHubOAuthTokenRepository tokenRepository,
-        ILogger logger)
+        ILogger<GitHubPullRequestService> logger)
     {
         _tokenRepository = tokenRepository;
         _logger = logger;
