@@ -24,11 +24,16 @@ public class UsageController : ControllerBase
     public async Task<ActionResult<UsageSummaryResponse>> GetSummary()
     {
         // Extract tenant_id from JWT (source of truth)
-        var tenantId = User.FindFirst("tenant_id")?.Value;
+        var tenantIdStr = User.FindFirst("tenant_id")?.Value;
 
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(tenantIdStr))
         {
             return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
+
+        if (!Guid.TryParse(tenantIdStr, out var tenantId))
+        {
+            return BadRequest(new { error = "Invalid tenant ID format" });
         }
 
         _logger.LogInformation("Getting usage summary for tenant {TenantId}", tenantId);
@@ -120,11 +125,16 @@ public class UsageController : ControllerBase
     public async Task<ActionResult<List<FeatureUsage>>> GetUsageByFeature()
     {
         // Extract tenant_id from JWT (source of truth)
-        var tenantId = User.FindFirst("tenant_id")?.Value;
+        var tenantIdStr = User.FindFirst("tenant_id")?.Value;
 
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(tenantIdStr))
         {
             return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
+
+        if (!Guid.TryParse(tenantIdStr, out var tenantId))
+        {
+            return BadRequest(new { error = "Invalid tenant ID format" });
         }
 
         _logger.LogInformation("Getting feature usage for tenant {TenantId}", tenantId);
@@ -169,11 +179,16 @@ public class UsageController : ControllerBase
     public async Task<ActionResult<List<UserUsage>>> GetTopUsers([FromQuery] int limit = 10)
     {
         // Extract tenant_id from JWT (source of truth)
-        var tenantId = User.FindFirst("tenant_id")?.Value;
+        var tenantIdStr = User.FindFirst("tenant_id")?.Value;
 
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(tenantIdStr))
         {
             return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
+
+        if (!Guid.TryParse(tenantIdStr, out var tenantId))
+        {
+            return BadRequest(new { error = "Invalid tenant ID format" });
         }
 
         _logger.LogInformation("Getting top {Limit} users for tenant {TenantId}", limit, tenantId);
@@ -191,11 +206,16 @@ public class UsageController : ControllerBase
     public async Task<ActionResult<UsageHistoryResponse>> GetHistory([FromQuery] int days = 30)
     {
         // Extract tenant_id from JWT (source of truth)
-        var tenantId = User.FindFirst("tenant_id")?.Value;
+        var tenantIdStr = User.FindFirst("tenant_id")?.Value;
 
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(tenantIdStr))
         {
             return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
+
+        if (!Guid.TryParse(tenantIdStr, out var tenantId))
+        {
+            return BadRequest(new { error = "Invalid tenant ID format" });
         }
 
         _logger.LogInformation("Getting {Days} days of usage history for tenant {TenantId}", days, tenantId);
