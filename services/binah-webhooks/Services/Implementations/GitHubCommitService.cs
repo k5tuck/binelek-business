@@ -102,7 +102,7 @@ public class GitHubCommitService : IGitHubCommitService
             _logger.LogDebug("Getting commit {Sha} from {Owner}/{Repo}", sha, owner, repo);
 
             var client = GetGitHubClient();
-            var commit = await client.Git.Commit.Get(owner, repo, sha);
+            var commit = await client.Repository.Commit.Get(owner, repo, sha);
 
             _logger.LogInformation("Successfully retrieved commit {Sha} from {Owner}/{Repo}", sha, owner, repo);
             return commit;

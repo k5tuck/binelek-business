@@ -487,7 +487,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
                     Reviewer = r.User.Login,
                     State = r.State.StringValue,
                     Body = r.Body,
-                    SubmittedAt = r.SubmittedAt
+                    SubmittedAt = r.SubmittedAt?.DateTime
                 }).ToList(),
                 CanMerge = canMerge,
                 BlockingReasons = blockingReasons
@@ -527,7 +527,7 @@ public class GitHubPullRequestService : IGitHubPullRequestService
             IsMergeable = pr.Mergeable,
             Author = pr.User.Login,
             CreatedAt = pr.CreatedAt.DateTime,
-            UpdatedAt = pr.UpdatedAt?.DateTime,
+            UpdatedAt = pr.UpdatedAt.DateTime,
             MergedAt = pr.MergedAt?.DateTime,
             ClosedAt = pr.ClosedAt?.DateTime,
             Commits = pr.Commits,
