@@ -80,7 +80,7 @@ public class UsageController : ControllerBase
 
         // Get limits from subscription
         var subscription = await _dbContext.Subscriptions
-            .Where(s => s.Customer.TenantId == tenantId.ToString() && s.Status == "active")
+            .Where(s => s.Customer.TenantId == tenantId && s.Status == "active")
             .Include(s => s.Customer)
             .FirstOrDefaultAsync();
 
