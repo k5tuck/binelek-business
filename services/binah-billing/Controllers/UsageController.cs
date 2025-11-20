@@ -1,5 +1,4 @@
 using Binah.Billing.Models;
-using Binah.Infrastructure.MultiTenancy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,7 +23,13 @@ public class UsageController : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<UsageSummaryResponse>> GetSummary()
     {
-        var tenantId = TenantContext.GetRequiredTenantId();
+        // Extract tenant_id from JWT (source of truth)
+        var tenantId = User.FindFirst("tenant_id")?.Value;
+
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
 
         _logger.LogInformation("Getting usage summary for tenant {TenantId}", tenantId);
 
@@ -114,7 +119,13 @@ public class UsageController : ControllerBase
     [HttpGet("by-feature")]
     public async Task<ActionResult<List<FeatureUsage>>> GetUsageByFeature()
     {
-        var tenantId = TenantContext.GetRequiredTenantId();
+        // Extract tenant_id from JWT (source of truth)
+        var tenantId = User.FindFirst("tenant_id")?.Value;
+
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
 
         _logger.LogInformation("Getting feature usage for tenant {TenantId}", tenantId);
 
@@ -157,7 +168,13 @@ public class UsageController : ControllerBase
     [HttpGet("top-users")]
     public async Task<ActionResult<List<UserUsage>>> GetTopUsers([FromQuery] int limit = 10)
     {
-        var tenantId = TenantContext.GetRequiredTenantId();
+        // Extract tenant_id from JWT (source of truth)
+        var tenantId = User.FindFirst("tenant_id")?.Value;
+
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
 
         _logger.LogInformation("Getting top {Limit} users for tenant {TenantId}", limit, tenantId);
 
@@ -173,7 +190,13 @@ public class UsageController : ControllerBase
     [HttpGet("history")]
     public async Task<ActionResult<UsageHistoryResponse>> GetHistory([FromQuery] int days = 30)
     {
-        var tenantId = TenantContext.GetRequiredTenantId();
+        // Extract tenant_id from JWT (source of truth)
+        var tenantId = User.FindFirst("tenant_id")?.Value;
+
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            return Unauthorized(new { error = "Tenant ID not found in token" });
+        }
 
         _logger.LogInformation("Getting {Days} days of usage history for tenant {TenantId}", days, tenantId);
 
