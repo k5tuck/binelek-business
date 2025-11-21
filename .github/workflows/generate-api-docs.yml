@@ -1,0 +1,110 @@
+name: Generate API Documentation
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to generate docs for (or "all")'
+        default: 'all'
+
+jobs:
+  generate-binah-billing-docs:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.service == 'binah-billing' || github.event.inputs.service == 'all') ||
+      github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet tool install -g docfx
+      - name: Generate Documentation
+        run: |
+          cd services/binah-billing
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+          docfx docfx.json
+      - name: Package Documentation
+        run: |
+          cd services/binah-billing/_site
+          tar -czf ../../binah-billing-docs.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binah-billing-docs
+          path: services/binah-billing/binah-billing-docs.tar.gz
+          retention-days: 90
+      - name: Get short SHA
+        id: sha
+        run: echo "SHORT_SHA=$((echo ${{ github.sha }} | cut -c1-7))" >> $GITHUB_OUTPUT
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: binah-billing-docs-${{ steps.sha.outputs.SHORT_SHA }}
+          name: "Binah Billing API Docs"
+          files: services/binah-billing/binah-billing-docs.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Trigger binelek-docs update
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          repository: k5tuck/binelek-docs
+          event-type: api-docs-updated
+          client-payload: '{"service": "binah-billing"}'
+        continue-on-error: true
+  generate-binah-webhooks-docs:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.service == 'binah-webhooks' || github.event.inputs.service == 'all') ||
+      github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet tool install -g docfx
+      - name: Generate Documentation
+        run: |
+          cd services/binah-webhooks
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+          docfx docfx.json
+      - name: Package Documentation
+        run: |
+          cd services/binah-webhooks/_site
+          tar -czf ../../binah-webhooks-docs.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binah-webhooks-docs
+          path: services/binah-webhooks/binah-webhooks-docs.tar.gz
+          retention-days: 90
+      - name: Get short SHA
+        id: sha
+        run: echo "SHORT_SHA=$((echo ${{ github.sha }} | cut -c1-7))" >> $GITHUB_OUTPUT
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: binah-webhooks-docs-${{ steps.sha.outputs.SHORT_SHA }}
+          name: "Binah Webhooks API Docs"
+          files: services/binah-webhooks/binah-webhooks-docs.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Trigger binelek-docs update
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          repository: k5tuck/binelek-docs
+          event-type: api-docs-updated
+          client-payload: '{"service": "binah-webhooks"}'
+        continue-on-error: true
