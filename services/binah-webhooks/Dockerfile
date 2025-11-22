@@ -3,18 +3,24 @@ WORKDIR /app
 EXPOSE 8099
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG GITHUB_TOKEN
 WORKDIR /src
 
-# Copy project files
-COPY ["services/binah-webhooks/Binah.Webhooks.csproj", "services/binah-webhooks/"]
-COPY ["libraries/binah-core/Binah.Core.csproj", "libraries/binah-core/"]
-COPY ["libraries/binah-contracts/Binah.Contracts.csproj", "libraries/binah-contracts/"]
+# Configure GitHub Packages as NuGet source
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      dotnet nuget add source https://nuget.pkg.github.com/k5tuck/index.json \
+        --name github \
+        --username k5tuck \
+        --password "$GITHUB_TOKEN" \
+        --store-password-in-clear-text; \
+    fi
 
-# Restore dependencies
+# Copy service project
+COPY ["services/binah-webhooks/Binah.Webhooks.csproj", "services/binah-webhooks/"]
 RUN dotnet restore "services/binah-webhooks/Binah.Webhooks.csproj"
 
-# Copy everything else
-COPY . .
+# Copy source files
+COPY services/binah-webhooks/ services/binah-webhooks/
 
 # Build
 WORKDIR "/src/services/binah-webhooks"
