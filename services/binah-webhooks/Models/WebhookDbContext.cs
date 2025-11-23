@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Binah.Webhooks.Models.Domain;
+using System.Text.RegularExpressions;
 
 namespace Binah.Webhooks.Models;
 
@@ -27,6 +28,37 @@ public class WebhookDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Configure PostgreSQL naming convention (snake_case)
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            // Convert table names to snake_case
+            entity.SetTableName(entity.GetTableName()?.ToSnakeCase());
+
+            // Convert column names to snake_case
+            foreach (var property in entity.GetProperties())
+            {
+                property.SetColumnName(property.GetColumnName().ToSnakeCase());
+            }
+
+            // Convert key names to snake_case
+            foreach (var key in entity.GetKeys())
+            {
+                key.SetName(key.GetName()?.ToSnakeCase());
+            }
+
+            // Convert foreign key names to snake_case
+            foreach (var foreignKey in entity.GetForeignKeys())
+            {
+                foreignKey.SetConstraintName(foreignKey.GetConstraintName()?.ToSnakeCase());
+            }
+
+            // Convert index names to snake_case
+            foreach (var index in entity.GetIndexes())
+            {
+                index.SetDatabaseName(index.GetDatabaseName()?.ToSnakeCase());
+            }
+        }
 
         // WebhookSubscription configuration
         modelBuilder.Entity<WebhookSubscription>(entity =>
@@ -159,5 +191,23 @@ public class WebhookDbContext : DbContext
                 .HasForeignKey(e => e.ExtensionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+    }
+}
+
+/// <summary>
+/// String extension methods for naming conventions
+/// </summary>
+internal static class StringExtensions
+{
+    /// <summary>
+    /// Converts a PascalCase string to snake_case
+    /// </summary>
+    public static string ToSnakeCase(this string? input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input ?? string.Empty;
+
+        var startUnderscores = Regex.Match(input, @"^_+");
+        return startUnderscores + Regex.Replace(input, @"([a-z0-9])([A-Z])", "$1_$2").ToLower();
     }
 }
